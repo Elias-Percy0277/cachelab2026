@@ -43,24 +43,41 @@ void gemm_case0(ptr_reg A, ptr_reg B, ptr_reg C, ptr_reg buffer)
 #undef n
 #undef p
 
-#define m case1_m
-#define n case1_n
-#define p case1_p
+#define m case1_m   // 16
+#define n case1_n   // 16
+#define p case1_p   // 16
 
 void gemm_case1(ptr_reg A, ptr_reg B, ptr_reg C, ptr_reg buffer)
 {
-  for (reg i = 0; i < m; ++i)
+  for (reg i0(0); i0 < m; i0 += 4)
   {
-    for (reg j = 0; j < p; ++j)
+    for (reg j0(0); j0 < p; j0 += 4)
     {
-      reg tmpc = 0;
-      for (reg k = 0; k < n; ++k)
+      reg acc[4][4];                     
+      for (reg ii(0); ii < 4; ++ii)
+        for (reg jj(0); jj < 4; ++jj)
+          acc[ii][jj] = 0;
+
+      for (reg k(0); k < n; ++k)
       {
-        reg tmpa = A[i * n + k];
-        reg tmpb = B[k * p + j];
-        tmpc += tmpa * tmpb;
+        reg a0(A[(i0 + 0) * n + k]);     
+        reg a1(A[(i0 + 1) * n + k]);
+        reg a2(A[(i0 + 2) * n + k]);
+        reg a3(A[(i0 + 3) * n + k]);
+
+        for (reg jj(0); jj < 4; ++jj)
+        {
+          reg b(B[k * p + j0 + jj]);     
+          acc[0][jj] += a0 * b;
+          acc[1][jj] += a1 * b;
+          acc[2][jj] += a2 * b;
+          acc[3][jj] += a3 * b;
+        }
       }
-      C[i * p + j] = tmpc;
+
+      for (reg ii(0); ii < 4; ++ii)
+        for (reg jj(0); jj < 4; ++jj)
+          C[(i0 + ii) * p + j0 + jj] = acc[ii][jj];
     }
   }
 }
@@ -72,21 +89,42 @@ void gemm_case1(ptr_reg A, ptr_reg B, ptr_reg C, ptr_reg buffer)
 #define m case2_m
 #define n case2_n
 #define p case2_p
+#define BI 4        
+#define BJ 4 
 
 void gemm_case2(ptr_reg A, ptr_reg B, ptr_reg C, ptr_reg buffer)
 {
-  for (reg i = 0; i < m; ++i)
+  for (reg i0(0); i0 < m; i0 += BI)
   {
-    for (reg j = 0; j < p; ++j)
+    for (reg j0(0); j0 < p; j0 += BJ)
     {
-      reg tmpc = 0;
-      for (reg k = 0; k < n; ++k)
+      reg acc[BI][BJ];
+      for (reg ii(0); ii < BI; ++ii)
+        for (reg jj(0); jj < BJ; ++jj)
+          acc[ii][jj] = 0;
+
+      for (reg k(0); k < n; ++k)
       {
-        reg tmpa = A[i * n + k];
-        reg tmpb = B[k * p + j];
-        tmpc += tmpa * tmpb;
+        reg a[BI];
+        for (reg ii(0); ii < BI; ++ii)     
+          a[ii] = 0;
+        for (reg ii(0); ii < BI; ++ii)
+          if (i0 + ii < m)                
+            a[ii] = A[(i0 + ii) * n + k];
+
+        for (reg jj(0); jj < BJ; ++jj)
+          if (j0 + jj < p)                 
+          {
+            reg b(B[k * p + j0 + jj]);
+            for (reg ii(0); ii < BI; ++ii)
+              acc[ii][jj] += a[ii] * b;
+          }
       }
-      C[i * p + j] = tmpc;
+
+      for (reg ii(0); ii < BI; ++ii)
+        for (reg jj(0); jj < BJ; ++jj)
+          if (i0 + ii < m && j0 + jj < p)  
+            C[(i0 + ii) * p + j0 + jj] = acc[ii][jj];
     }
   }
 }
@@ -101,18 +139,77 @@ void gemm_case2(ptr_reg A, ptr_reg B, ptr_reg C, ptr_reg buffer)
 
 void gemm_case3(ptr_reg A, ptr_reg B, ptr_reg C, ptr_reg buffer)
 {
-  for (reg i = 0; i < m; ++i)
+  for (reg i0(0); i0 < m; i0 += 4)
   {
-    for (reg j = 0; j < p; ++j)
+    for (reg j0(0); j0 < p; j0 += 6)
     {
-      reg tmpc = 0;
-      for (reg k = 0; k < n; ++k)
+      reg acc[4][6];
+      for (reg ii(0); ii < 4; ++ii)
+        for (reg jj(0); jj < 6; ++jj)
+          acc[ii][jj] = 0;
+
+      for (reg k(0); k < n; ++k)
       {
-        reg tmpa = A[i * n + k];
-        reg tmpb = B[k * p + j];
-        tmpc += tmpa * tmpb;
+        reg a0(0), a1(0), a2(0), a3(0);
+        if (i0 + 0 < m) a0 = A[(i0 + 0) * n + k];
+        if (i0 + 1 < m) a1 = A[(i0 + 1) * n + k];
+        if (i0 + 2 < m) a2 = A[(i0 + 2) * n + k];
+        if (i0 + 3 < m) a3 = A[(i0 + 3) * n + k];
+
+        if (j0 + 0 < p)
+        {
+          reg b0(B[k * p + j0 + 0]);
+          acc[0][0] += a0 * b0;
+          acc[1][0] += a1 * b0;
+          acc[2][0] += a2 * b0;
+          acc[3][0] += a3 * b0;
+        }
+        if (j0 + 1 < p)
+        {
+          reg b1(B[k * p + j0 + 1]);
+          acc[0][1] += a0 * b1;
+          acc[1][1] += a1 * b1;
+          acc[2][1] += a2 * b1;
+          acc[3][1] += a3 * b1;
+        }
+        if (j0 + 2 < p)
+        {
+          reg b2(B[k * p + j0 + 2]);
+          acc[0][2] += a0 * b2;
+          acc[1][2] += a1 * b2;
+          acc[2][2] += a2 * b2;
+          acc[3][2] += a3 * b2;
+        }
+        if (j0 + 3 < p)
+        {
+          reg b3(B[k * p + j0 + 3]);
+          acc[0][3] += a0 * b3;
+          acc[1][3] += a1 * b3;
+          acc[2][3] += a2 * b3;
+          acc[3][3] += a3 * b3;
+        }
+        if (j0 + 4 < p)
+        {
+          reg b4(B[k * p + j0 + 4]);
+          acc[0][4] += a0 * b4;
+          acc[1][4] += a1 * b4;
+          acc[2][4] += a2 * b4;
+          acc[3][4] += a3 * b4;
+        }
+        if (j0 + 5 < p)
+        {
+          reg b5(B[k * p + j0 + 5]);
+          acc[0][5] += a0 * b5;
+          acc[1][5] += a1 * b5;
+          acc[2][5] += a2 * b5;
+          acc[3][5] += a3 * b5;
+        }
       }
-      C[i * p + j] = tmpc;
+
+      for (reg ii(0); ii < 4; ++ii)
+        for (reg jj(0); jj < 6; ++jj)
+          if (i0 + ii < m && j0 + jj < p)
+            C[(i0 + ii) * p + j0 + jj] = acc[ii][jj];
     }
   }
 }
